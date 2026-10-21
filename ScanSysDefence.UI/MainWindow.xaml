@@ -1,0 +1,1504 @@
+<Window x:Class="ScanSysDefence.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:vm="clr-namespace:ScanSysDefence.UI.ViewModels"
+        xmlns:local="clr-namespace:ScanSysDefence.UI.Converters"
+        xmlns:models="clr-namespace:ScanSysDefence.Core.Models;assembly=ScanSysDefence.Core"
+        mc:Ignorable="d"
+        Title="ScanSysDefence — Анализ безопасности Windows"
+        Height="800" Width="1280"
+        MinHeight="600" MinWidth="1000"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BackgroundColor}">
+
+    <Window.Resources>
+        <!-- Risk level to brush converter -->
+        <local:RiskLevelToBrushConverter x:Key="RiskToBrush"/>
+        <local:RiskLevelToTextConverter x:Key="RiskToText"/>
+        <local:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <local:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>
+        <local:LongToSizeConverter x:Key="SizeConverter"/>
+        <local:StringNotEmptyToVisibilityConverter x:Key="StrToVis"/>
+
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceColor}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="4"/>
+        </Style>
+
+        <Style x:Key="StatCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceVariantColor}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="MinWidth" Value="140"/>
+        </Style>
+
+        <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextColor}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="RiskBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="4,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- HEADER / TOOLBAR -->
+        <Border Grid.Row="0" Background="{StaticResource SurfaceColor}" Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <materialDesign:PackIcon Kind="ShieldSearch" Width="32" Height="32" Foreground="{StaticResource PrimaryColor}"/>
+                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="ScanSysDefence" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextColor}"/>
+                        <TextBlock Text="Анализ безопасности Windows 10" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Scan Button -->
+                    <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                            Command="{Binding ScanCommand}"
+                            Visibility="{Binding IsIdle, Converter={StaticResource BoolToVis}}"
+                            Padding="16,8" Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Play" Margin="0,0,6,0"/>
+                            <TextBlock Text="Сканировать"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Cancel Button -->
+                    <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Command="{Binding CancelScanCommand}"
+                            Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"
+                            Padding="16,8" Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Stop" Margin="0,0,6,0"/>
+                            <TextBlock Text="Отмена"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Export Button -->
+                    <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Command="{Binding ExportResultsCommand}"
+                            Padding="16,8" Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Export" Margin="0,0,6,0"/>
+                            <TextBlock Text="Экспорт"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- PROGRESS BAR (when scanning) -->
+        <Border Grid.Row="1" Background="{StaticResource SurfaceColor}" Padding="16,4"
+                Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <ProgressBar Value="{Binding ScanProgressPercent, Mode=OneWay}" Maximum="100"
+                             Height="4" Foreground="{StaticResource PrimaryColor}"
+                             Background="{StaticResource SurfaceVariantColor}" BorderThickness="0"/>
+                <TextBlock Text="{Binding CurrentProgress.StatusMessage}" FontSize="11"
+                           Foreground="{StaticResource TextSecondaryColor}" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- MAIN CONTENT -->
+        <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="{StaticResource BackgroundColor}" BorderThickness="0"
+                    Padding="0" Margin="0">
+
+            <!-- TAB: Dashboard -->
+            <TabItem AutomationProperties.Name="Панель">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="ViewDashboard" Margin="0,0,6,0"/>
+                        <TextBlock Text="Панель"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer Background="{StaticResource BackgroundColor}" Padding="16">
+                    <ContentControl Content="{Binding Dashboard}">
+                        <ContentControl.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <!-- Overall Status -->
+                                    <Border Style="{StaticResource CardStyle}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding OverallStatus}" FontSize="20" FontWeight="Bold"
+                                                       Foreground="{StaticResource TextColor}"/>
+                                            <TextBlock FontSize="12" Foreground="{StaticResource TextSecondaryColor}" Margin="0,4,0,0">
+                                                <Run Text="Последнее сканирование: "/>
+                                                <Run Text="{Binding LastScanTime, Mode=OneWay}"/>
+                                                <Run Text=" | Длительность: "/>
+                                                <Run Text="{Binding ScanDuration, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Stat Cards Row 1 -->
+                                    <UniformGrid Columns="5" Margin="0,8">
+                                        <Border Style="{StaticResource StatCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding TotalScanned}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource PrimaryColor}"/>
+                                                <TextBlock Text="Всего проверено" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding CriticalCount}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource CriticalBrush}"/>
+                                                <TextBlock Text="Критические" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding HighCount}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource HighBrush}"/>
+                                                <TextBlock Text="Высокий риск" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding MediumCount}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource MediumBrush}"/>
+                                                <TextBlock Text="Средний" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Style="{StaticResource StatCardStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding LowCount}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource LowBrush}"/>
+                                                <TextBlock Text="Низкий" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </UniformGrid>
+
+                                    <!-- Category Breakdown -->
+                                    <Border Style="{StaticResource CardStyle}" Margin="0,8">
+                                        <StackPanel>
+                                            <TextBlock Text="Разбивка по категориям" Style="{StaticResource SectionHeaderStyle}"/>
+                                            <UniformGrid Columns="5">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TotalServices}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextColor}"/>
+                                                    <TextBlock Text="Службы" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TotalStartupItems}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextColor}"/>
+                                                    <TextBlock Text="Автозапуск" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TotalProcesses}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextColor}"/>
+                                                    <TextBlock Text="Процессы" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TotalDrivers}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextColor}"/>
+                                                    <TextBlock Text="Драйверы" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding TotalTasks}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextColor}"/>
+                                                    <TextBlock Text="Задачи" FontSize="11" Foreground="{StaticResource TextSecondaryColor}"/>
+                                                </StackPanel>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                    </ContentControl>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB: Scan Results -->
+            <TabItem AutomationProperties.Name="Результаты">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="FileSearch" Margin="0,0,6,0"/>
+                        <TextBlock Text="Результаты"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Background="{StaticResource BackgroundColor}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="380"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Results DataGrid -->
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Filter Bar -->
+                        <Border Grid.Row="0" Background="{StaticResource SurfaceColor}" Padding="12,8">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Filter" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBox Width="250" Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                             Text="{Binding Results.FilterText, UpdateSourceTrigger=PropertyChanged}"
+                                             materialDesign:HintAssist.Hint="Поиск по имени..."/>
+                                    <ComboBox Width="160" Margin="12,0,0,0"
+                                              SelectedValue="{Binding Results.MinRiskFilter}"
+                                              SelectedValuePath="Tag"
+                                              Style="{StaticResource MaterialDesignOutlinedComboBox}"
+                                              materialDesign:HintAssist.Hint="Мин. уровень риска">
+                                        <ComboBoxItem Content="Все" Tag="Informational"/>
+                                        <ComboBoxItem Content="Средний+" Tag="Medium"/>
+                                        <ComboBoxItem Content="Высокий+" Tag="High"/>
+                                        <ComboBoxItem Content="Только критические" Tag="Critical"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <materialDesign:PackIcon Kind="Refresh" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Сканировать заново:" VerticalAlignment="Center" FontSize="11"
+                                               Foreground="{StaticResource TextSecondaryColor}" Margin="0,0,8,0"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Службы"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningServices"
+                                            ToolTip="Просканировать только службы (например, для отключения телеметрии)"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Автозапуск"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningStartup"
+                                            ToolTip="Просканировать только автозапуск"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Процессы"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningProcesses"
+                                            ToolTip="Просканировать только процессы"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Драйверы"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningDrivers"
+                                            ToolTip="Просканировать только драйверы"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Задачи"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningTasks"
+                                            ToolTip="Просканировать только задачи планировщика"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="WMI"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningWmi"
+                                            ToolTip="Просканировать только WMI-подписки"/>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="8,2" Margin="2,0"
+                                            FontSize="11" Content="Браузеры"
+                                            Command="{Binding ScanCategoryCommand}" CommandParameter="ScanningBrowsers"
+                                            ToolTip="Просканировать расширения браузеров"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- TabControl for result categories -->
+                        <TabControl Grid.Row="1" Background="{StaticResource BackgroundColor}" BorderThickness="0">
+                            <!-- Services -->
+                            <TabItem Header="Службы">
+                                <DataGrid ItemsSource="{Binding Results.Services}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          GridLinesVisibility="Horizontal"
+                                          HorizontalGridLinesBrush="{StaticResource BorderColor}"
+                                          HeadersVisibility="Column"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding ServiceName}" Width="160"/>
+                                        <DataGridTextColumn Header="Отображаемое имя" Binding="{Binding DisplayName}" Width="200"/>
+                                        <DataGridTextColumn Header="Состояние" Binding="{Binding CurrentState}" Width="100"/>
+                                        <DataGridTextColumn Header="Запуск" Binding="{Binding StartType}" Width="80"/>
+                                        <DataGridTemplateColumn Header="Подпись" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock>
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="✓"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource LowBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding SignatureValid}" Value="False">
+                                                                        <Setter Property="Text" Value="✗"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource CriticalBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- Startup -->
+                            <TabItem Header="Автозапуск">
+                                <DataGrid ItemsSource="{Binding Results.StartupItems}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="180"/>
+                                        <DataGridTextColumn Header="Расположение" Binding="{Binding LocationType}" Width="140"/>
+                                        <DataGridTextColumn Header="Команда" Binding="{Binding Command}" Width="300"/>
+                                        <DataGridCheckBoxColumn Header="Активен" Binding="{Binding IsEnabled}" Width="60"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- Processes -->
+                            <TabItem Header="Процессы">
+                                <DataGrid ItemsSource="{Binding Results.Processes}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding ProcessName}" Width="140"/>
+                                        <DataGridTextColumn Header="PID" Binding="{Binding ProcessId}" Width="60"/>
+                                        <DataGridTextColumn Header="Компания" Binding="{Binding CompanyName}" Width="160"/>
+                                        <DataGridTemplateColumn Header="Подпись" Width="60">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock>
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="✓"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource LowBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding SignatureValid}" Value="False">
+                                                                        <Setter Property="Text" Value="✗"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource CriticalBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Память" Binding="{Binding WorkingSet64, Converter={StaticResource SizeConverter}}" Width="80"/>
+                                        <DataGridTextColumn Header="Соединения" Binding="{Binding NetworkConnections.Count}" Width="70"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- Drivers -->
+                            <TabItem Header="Драйверы">
+                                <DataGrid ItemsSource="{Binding Results.Drivers}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding DriverName}" Width="180"/>
+                                        <DataGridTextColumn Header="Описание" Binding="{Binding DisplayName}" Width="200"/>
+                                        <DataGridTextColumn Header="Тип" Binding="{Binding DriverType}" Width="100"/>
+                                        <DataGridTextColumn Header="Подпись" Binding="{Binding SignatureValid}" Width="70"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- Scheduled Tasks -->
+                            <TabItem Header="Задачи">
+                                <DataGrid ItemsSource="{Binding Results.ScheduledTasks}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding TaskName}" Width="200"/>
+                                        <DataGridTextColumn Header="Путь" Binding="{Binding TaskPath}" Width="200"/>
+                                        <DataGridCheckBoxColumn Header="Вкл" Binding="{Binding Enabled}" Width="50"/>
+                                        <DataGridCheckBoxColumn Header="Скрыта" Binding="{Binding Hidden}" Width="50"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- WMI Subscriptions -->
+                            <TabItem Header="WMI">
+                                <DataGrid ItemsSource="{Binding Results.WmiSubscriptions}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding SubscriptionName}" Width="200"/>
+                                        <DataGridTextColumn Header="Тип" Binding="{Binding ConsumerType}" Width="160"/>
+                                        <DataGridTextColumn Header="Команда" Binding="{Binding ConsumerCommand}" Width="300"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+
+                            <!-- Browser Extensions -->
+                            <TabItem Header="Браузеры">
+                                <DataGrid ItemsSource="{Binding Results.BrowserExtensions}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          SelectionMode="Single"
+                                          SelectedItem="{Binding Results.SelectedItem}"
+                                          Background="{StaticResource SurfaceColor}"
+                                          RowBackground="{StaticResource SurfaceVariantColor}"
+                                          AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                          RowHeight="32">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Риск" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource RiskBadge}"
+                                                            Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                            HorizontalAlignment="Left">
+                                                        <TextBlock Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}}"
+                                                                   FontSize="10" Foreground="White" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Браузер" Binding="{Binding Browser}" Width="80"/>
+                                        <DataGridTextColumn Header="Имя" Binding="{Binding ExtensionName}" Width="200"/>
+                                        <DataGridTextColumn Header="Версия" Binding="{Binding Version}" Width="80"/>
+                                        <DataGridTemplateColumn Header="Магазин" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock>
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="✓"/>
+                                                                <Setter Property="Foreground" Value="{StaticResource LowBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsFromStore}" Value="False">
+                                                                        <Setter Property="Text" Value="✗"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource HighBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Разрешения" Binding="{Binding Permissions}" Width="2*"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="60"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+
+                    <!-- DETAIL PANEL (right side) -->
+                    <Border Grid.Column="1" Background="{StaticResource SurfaceColor}" Margin="4,0" CornerRadius="8" Padding="16">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Детали элемента" Style="{StaticResource SectionHeaderStyle}"
+                                           Visibility="{Binding Results.HasSelection, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text="Выберите элемент из списка для просмотра деталей"
+                                           Foreground="{StaticResource TextSecondaryColor}"
+                                           Visibility="{Binding Results.HasSelection, Converter={StaticResource InvBoolToVis}}"
+                                           TextWrapping="Wrap"/>
+
+                                <!-- Selected Item Details -->
+                                <StackPanel Visibility="{Binding Results.HasSelection, Converter={StaticResource BoolToVis}}"
+                                            DataContext="{Binding Results.SelectedItem}">
+                                    <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextColor}"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Border Background="{Binding RiskAssessment.Level, Converter={StaticResource RiskToBrush}}"
+                                                        CornerRadius="4" Padding="8,2">
+                                                    <TextBlock FontSize="11" Foreground="White" FontWeight="SemiBold">
+                                                        <Run Text="Риск: "/>
+                                                        <Run Text="{Binding RiskAssessment.Level, Converter={StaticResource RiskToText}, Mode=OneWay}"/>
+                                                        <Run Text=" ("/>
+                                                        <Run Text="{Binding RiskAssessment.TotalScore, Mode=OneWay}"/>
+                                                        <Run Text="/100)"/>
+                                                    </TextBlock>
+                                                </Border>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Path -->
+                                    <TextBlock Text="Путь:" Foreground="{StaticResource TextSecondaryColor}" FontSize="11"/>
+                                    <TextBlock Text="{Binding Path}" Foreground="{StaticResource TextColor}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,2,0,8"/>
+
+                                    <!-- Publisher -->
+                                    <TextBlock Text="Издатель:" Foreground="{StaticResource TextSecondaryColor}" FontSize="11"/>
+                                    <TextBlock Text="{Binding Publisher}" Foreground="{StaticResource TextColor}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,2,0,8"/>
+
+                                    <!-- Signature -->
+                                    <TextBlock Text="Цифровая подпись:" Foreground="{StaticResource TextSecondaryColor}" FontSize="11"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
+                                        <TextBlock Foreground="{StaticResource TextColor}" FontSize="11">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="Подписана и валидна"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource LowBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SignatureValid}" Value="False">
+                                                            <Setter Property="Text" Value="Подпись недействительна"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSigned}" Value="False">
+                                                            <Setter Property="Text" Value="Не подписана"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource HighBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <!-- Current State -->
+                                    <TextBlock Text="Текущее состояние (проверка в реальном времени):" Foreground="{StaticResource TextSecondaryColor}" FontSize="11" Margin="0,8,0,4"/>
+                                    <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="8,6" Margin="0,0,0,8">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DataContext.Results.CurrentStateText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                       FontSize="11" Foreground="{StaticResource TextColor}" TextWrapping="Wrap"/>
+                                            <Button Content="Обновить состояние" FontSize="10" Margin="0,6,0,0" Padding="6,2"
+                                                    HorizontalAlignment="Left"
+                                                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                    ToolTip="Перепроверить: остановлен ли процесс, отключена ли служба и т.д."
+                                                    Command="{Binding DataContext.Results.RefreshStateCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Risk Factors -->
+                                    <TextBlock Text="Факторы риска:" Foreground="{StaticResource TextSecondaryColor}" FontSize="11" Margin="0,8,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding RiskAssessment.Factors}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="8" Margin="0,2">
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Border Background="{Binding Severity, Converter={StaticResource RiskToBrush}}"
+                                                                    CornerRadius="3" Padding="6,1">
+                                                                <TextBlock Text="{Binding Score, StringFormat='+{0}'}"
+                                                                           FontSize="10" Foreground="White" FontWeight="Bold"/>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding Description}" FontSize="11"
+                                                                       Foreground="{StaticResource TextColor}" FontWeight="SemiBold"
+                                                                       Margin="6,0,0,0" TextWrapping="Wrap"/>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Recommendation}" FontSize="10"
+                                                                   Foreground="{StaticResource TextSecondaryColor}"
+                                                                   Margin="0,4,0,0" TextWrapping="Wrap" FontStyle="Italic"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- ACTION BUTTONS -->
+                                    <Separator Margin="0,16,0,8" Background="{StaticResource BorderColor}"/>
+                                    <TextBlock Text="Действия (наведите курсор, чтобы понять, почему кнопка неактивна):"
+                                               Foreground="{StaticResource TextSecondaryColor}" FontSize="11" Margin="0,0,0,8"/>
+
+                                    <UniformGrid Columns="2">
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2"
+                                                Command="{Binding DataContext.Results.StopCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.StopDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="Stop" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Остановить" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2"
+                                                Command="{Binding DataContext.Results.ForceKillCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.ForceKillDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="Skull" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Убить процесс" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2"
+                                                Command="{Binding DataContext.Results.DisableCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.DisableDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="Cancel" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Запретить" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2"
+                                                Command="{Binding DataContext.Results.QuarantineCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.QuarantineDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="Archive" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Карантин" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2"
+                                                Command="{Binding DataContext.Results.DeleteFileCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.DeleteFileDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="FileRemove" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Удалить файл" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                Padding="8,6" Margin="2" Foreground="{StaticResource CriticalBrush}"
+                                                Command="{Binding DataContext.Results.DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                ToolTip="{Binding DataContext.Results.DeleteDisabledReason, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="Delete" Width="16" Height="16" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Удалить" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </UniformGrid>
+
+                                    <TextBlock Text="{Binding DataContext.Results.ActionStatus, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               Foreground="{StaticResource TextColor}" FontSize="11" FontWeight="SemiBold"
+                                               TextWrapping="Wrap" Margin="0,10,0,0"/>
+
+                                    <!-- ACTION LOG -->
+                                    <TextBlock Text="Что произошло (журнал действий):" Foreground="{StaticResource TextSecondaryColor}"
+                                               FontSize="11" Margin="0,12,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding DataContext.Results.ActionLog, RelativeSource={RelativeSource AncestorType=Window}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="6,4" Margin="0,2">
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding TimeText}" Foreground="{StaticResource TextSecondaryColor}" FontSize="10" Margin="0,0,6,0"/>
+                                                            <TextBlock Text="{Binding Action}" FontWeight="SemiBold" FontSize="11" Foreground="{StaticResource TextColor}"/>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Result}" FontSize="10" TextWrapping="Wrap"
+                                                                   Foreground="{StaticResource TextSecondaryColor}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Disk Cleanup -->
+            <TabItem AutomationProperties.Name="Очистка дисков">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="DeleteSweep" Margin="0,0,6,0"/>
+                        <TextBlock Text="Очистка дисков"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Background="{StaticResource BackgroundColor}" Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Drive Selection -->
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Выберите диск:" Foreground="{StaticResource TextSecondaryColor}"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <ComboBox Width="350" ItemsSource="{Binding DiskCleanup.Drives}"
+                                      SelectedItem="{Binding DiskCleanup.SelectedDrive}"
+                                      Style="{StaticResource MaterialDesignOutlinedComboBox}"
+                                      materialDesign:HintAssist.Hint="Диск для сканирования">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel>
+                                            <TextBlock>
+                                                <Run Text="{Binding Letter, Mode=OneWay}"/>
+                                                <Run Text=" — "/>
+                                                <Run Text="{Binding Label, Mode=OneWay}"/>
+                                            </TextBlock>
+                                            <TextBlock FontSize="10" Foreground="{StaticResource TextSecondaryColor}">
+                                                <Run Text="Свободно: "/>
+                                                <Run Text="{Binding FreeSpace, Mode=OneWay, Converter={StaticResource SizeConverter}}"/>
+                                                <Run Text=" из "/>
+                                                <Run Text="{Binding TotalSize, Mode=OneWay, Converter={StaticResource SizeConverter}}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button Style="{StaticResource MaterialDesignRaisedButton}" Margin="12,0,0,0"
+                                    Command="{Binding DiskCleanup.ScanCommand}"
+                                    IsEnabled="{Binding DiskCleanup.CanScan}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Magnify" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Сканировать"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Category Selection -->
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,8">
+                        <StackPanel>
+                            <TextBlock Text="Категории очистки" Style="{StaticResource SectionHeaderStyle}"/>
+                            <ItemsControl ItemsSource="{Binding DiskCleanup.Categories}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelectedByDefault}" Margin="12,4"
+                                                  Content="{Binding DescriptionRu}" Foreground="{StaticResource TextColor}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Scan Results -->
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="{Binding DiskCleanup.StatusMessage}"
+                                       Foreground="{StaticResource TextSecondaryColor}" FontSize="12" Margin="0,0,0,8"/>
+
+                            <DataGrid Grid.Row="1" ItemsSource="{Binding DiskCleanup.Items}"
+                                      AutoGenerateColumns="False" IsReadOnly="False"
+                                      Background="{StaticResource SurfaceColor}"
+                                      RowBackground="{StaticResource SurfaceVariantColor}"
+                                      AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                      RowHeight="28">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="✓" Binding="{Binding IsSelected}" Width="30"/>
+                                    <DataGridTextColumn Header="Файл" Binding="{Binding FileName}" Width="250" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Категория" Binding="{Binding CategoryName}" Width="160" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding Size, Converter={StaticResource SizeConverter}}" Width="80" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Изменён" Binding="{Binding LastWriteTime, StringFormat='dd.MM.yyyy'}" Width="90" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Описание" Binding="{Binding DescriptionRu}" Width="*" IsReadOnly="True"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+
+                    <!-- Actions -->
+                    <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox Content="Создать точку восстановления"
+                                      IsChecked="{Binding DiskCleanup.CreateRestorePoint}"
+                                      Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <TextBlock Foreground="{StaticResource TextSecondaryColor}" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <Run Text="Выбрано файлов: "/>
+                                <Run Text="{Binding DiskCleanup.SelectedFiles, Mode=OneWay}"/>
+                                <Run Text=" | Размер: "/>
+                                <Run Text="{Binding DiskCleanup.SelectedSizeFormatted, Mode=OneWay}"/>
+                            </TextBlock>
+                            <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Command="{Binding DiskCleanup.CleanCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="DeleteSweep" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Очистить"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Registry Repair -->
+            <TabItem AutomationProperties.Name="Реестр">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="FileTree" Margin="0,0,6,0"/>
+                        <TextBlock Text="Реестр"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="16,16,16,0">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" Style="{StaticResource MaterialDesignRaisedButton}"
+                                    AutomationProperties.Name="Сканировать реестр"
+                                    Command="{Binding RegistryRepair.ScanCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Magnify" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Сканировать реестр"/>
+                                </StackPanel>
+                            </Button>
+                            <Button DockPanel.Dock="Left" Margin="8,0,0,0" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                    AutomationProperties.Name="Выбрать все исправимые"
+                                    Command="{Binding RegistryRepair.SelectAllCommand}"
+                                    ToolTip="Отметить все проблемы, которые программа умеет исправить автоматически">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="SelectAll" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Выбрать все исправимые"/>
+                                </StackPanel>
+                            </Button>
+                            <Button DockPanel.Dock="Left" Margin="8,0,0,0" Style="{StaticResource MaterialDesignOutlinedButton}"
+                                    AutomationProperties.Name="Снять выбор"
+                                    Command="{Binding RegistryRepair.SelectNoneCommand}"
+                                    ToolTip="Снять все отметки">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="SelectionRemove" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Снять выбор"/>
+                                </StackPanel>
+                            </Button>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock Foreground="{StaticResource TextSecondaryColor}" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <Run Text="Выбрано проблем: "/>
+                                    <Run Text="{Binding RegistryRepair.SelectedCount, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Status -->
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="16,8,16,0" Padding="12,8">
+                        <StackPanel>
+                            <TextBlock Text="{Binding RegistryRepair.StatusMessage}" Foreground="{StaticResource TextColor}" Margin="0,0,0,4"/>
+                            <ProgressBar Value="{Binding RegistryRepair.ProgressPercent, Mode=OneWay}" Maximum="100" Height="6"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Issues -->
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="16,8,16,0" Padding="0">
+                        <DataGrid ItemsSource="{Binding RegistryRepair.Issues}" AutoGenerateColumns="False"
+                                  IsReadOnly="False" CanUserAddRows="False" SelectionMode="Single"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  Background="Transparent" RowBackground="Transparent" AlternatingRowBackground="#10FFFFFF"
+                                  Foreground="{StaticResource TextColor}" BorderThickness="0"
+                                  TextOptions.TextFormattingMode="Display">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Width="40">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                      IsEnabled="{Binding CanRepair}"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="150" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Описание" Binding="{Binding DescriptionRu}" Width="2*" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Ключ реестра" Binding="{Binding KeyPath}" Width="2*" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Рекомендация" Binding="{Binding RecommendationRu}" Width="2*" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Уровень риска" Binding="{Binding RiskLevel}" Width="110" IsReadOnly="True"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <!-- Actions -->
+                    <Border Grid.Row="3" Style="{StaticResource CardStyle}" Margin="16,8,16,16">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                <CheckBox Content="Создать .reg-бэкап перед исправлением"
+                                          IsChecked="{Binding RegistryRepair.CreateBackup}"
+                                          Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                                        AutomationProperties.Name="Исправить выбранное"
+                                        Command="{Binding RegistryRepair.RepairCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Wrench" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Исправить выбранное"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock Text="Бэкап:" Foreground="{StaticResource TextSecondaryColor}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox ItemsSource="{Binding RegistryRepair.Backups}"
+                                          SelectedItem="{Binding RegistryRepair.SelectedBackup}"
+                                          Width="320" VerticalAlignment="Center">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Description}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Margin="8,0,0,0"
+                                        AutomationProperties.Name="Восстановить реестр"
+                                        Command="{Binding RegistryRepair.RestoreCommand}"
+                                        ToolTip="Восстановить реестр из выбранной .reg-копии">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Undo" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Восстановить"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Margin="8,0,0,0"
+                                        Command="{Binding RegistryRepair.RefreshBackupsCommand}"
+                                        ToolTip="Обновить список бэкапов">
+                                    <materialDesign:PackIcon Kind="Refresh"/>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Malware Analysis -->
+            <TabItem AutomationProperties.Name="Анализ угроз">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Bug" Margin="0,0,6,0"/>
+                        <TextBlock Text="Анализ угроз"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Background="{StaticResource BackgroundColor}" Margin="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="350"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Threat Tree -->
+                    <Border Grid.Column="0" Style="{StaticResource CardStyle}">
+                        <TreeView ItemsSource="{Binding Malware.ThreatTree}"
+                                  SelectedItemChanged="ThreatTree_SelectedItemChanged"
+                                  Background="{StaticResource SurfaceColor}"
+                                  Foreground="{StaticResource TextColor}"
+                                  BorderThickness="0">
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Background="{Binding Risk, Converter={StaticResource RiskToBrush}}"
+                                                CornerRadius="3" Padding="6,1" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding Score}" FontSize="10" Foreground="White" FontWeight="Bold"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
+                                                <Border Background="{Binding Risk, Converter={StaticResource RiskToBrush}}"
+                                                        CornerRadius="3" Padding="4,1" Margin="0,0,6,0">
+                                                    <TextBlock Text="{Binding Score}" FontSize="9" Foreground="White"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding Name}" FontSize="11"/>
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </Border>
+
+                    <!-- Behavior Report -->
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,0,0,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Описание поведения процесса" Style="{StaticResource SectionHeaderStyle}"/>
+                                <TextBlock Text="{Binding Malware.StatusMessage}"
+                                           Foreground="{StaticResource TextSecondaryColor}" Margin="0,0,0,12"/>
+
+                                <!-- Process Report -->
+                                <StackPanel Visibility="{Binding Malware.HasReport, Converter={StaticResource BoolToVis}}"
+                                            DataContext="{Binding Malware.SelectedReport}">
+                                    <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                        <StackPanel>
+                                            <TextBlock FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextColor}">
+                                                <Run Text="{Binding ProcessName, Mode=OneWay}"/>
+                                                <Run Text=" (PID: "/>
+                                                <Run Text="{Binding ProcessId, Mode=OneWay}"/>
+                                                <Run Text=")"/>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Summary}" Foreground="{StaticResource TextSecondaryColor}"
+                                                       FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Behavior Categories -->
+                                    <ItemsControl ItemsSource="{Binding Categories}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="4" Padding="10" Margin="0,4">
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding NameRu}" FontSize="13" FontWeight="SemiBold"
+                                                                       Foreground="{StaticResource TextColor}"/>
+                                                            <Border Background="{Binding Risk, Converter={StaticResource RiskToBrush}}"
+                                                                    CornerRadius="3" Padding="6,1" Margin="8,0,0,0">
+                                                                <TextBlock Text="{Binding Risk, Converter={StaticResource RiskToText}}"
+                                                                           FontSize="10" Foreground="White"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding DescriptionRu}" FontSize="11"
+                                                                   Foreground="{StaticResource TextSecondaryColor}"
+                                                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- MITRE ATT&amp;CK -->
+                                    <TextBlock Text="MITRE ATT&amp;CK техники:" Foreground="{StaticResource TextSecondaryColor}"
+                                               FontSize="12" Margin="0,12,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding MITRETechniques}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{StaticResource SurfaceVariantColor}" CornerRadius="3" Padding="6,2" Margin="0,2">
+                                                    <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource PrimaryColor}"/>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Indicators -->
+                                    <TextBlock Text="Индикаторы компрометации:" Foreground="{StaticResource TextSecondaryColor}"
+                                               FontSize="12" Margin="0,12,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding Indicators}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource CriticalBrush}"
+                                                           TextWrapping="Wrap" Margin="0,2"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Detailed Description -->
+                                    <TextBlock Text="Полное описание:" Foreground="{StaticResource TextSecondaryColor}"
+                                               FontSize="12" Margin="0,12,0,4"/>
+                                    <TextBlock Text="{Binding DetailedDescription}" FontSize="11"
+                                               Foreground="{StaticResource TextColor}" TextWrapping="Wrap"
+                                               FontFamily="Consolas" LineHeight="18"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Virus Scan -->
+            <TabItem AutomationProperties.Name="Проверка диска">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="ShieldSearch" Margin="0,0,6,0"/>
+                        <TextBlock Text="Проверка диска"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Background="{StaticResource BackgroundColor}" Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Настройки проверки -->
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Проверка на вирусы, шпионы и трояны" Style="{StaticResource SectionHeaderStyle}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="Диск:" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource TextSecondaryColor}"/>
+                                <ComboBox Width="240" ItemsSource="{Binding VirusScan.Drives}"
+                                          SelectedItem="{Binding VirusScan.SelectedDrive}"
+                                          Style="{StaticResource MaterialDesignOutlinedComboBox}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                                                <Run Text="{Binding Letter, Mode=OneWay}"/>
+                                                <Run Text=" — "/>
+                                                <Run Text="{Binding Label, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Margin="8,0,0,0" Padding="10,4"
+                                        Command="{Binding VirusScan.RefreshDrivesCommand}" ToolTip="Обновить список дисков">
+                                    <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16"/>
+                                </Button>
+                                <CheckBox Content="Или своя папка:" IsChecked="{Binding VirusScan.UseCustomPath}" Margin="16,0,8,0" VerticalAlignment="Center"/>
+                                <TextBox Width="300" VerticalAlignment="Center"
+                                         Text="{Binding VirusScan.CustomPath, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                         materialDesign:HintAssist.Hint="C:\Папка\для\проверки"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <CheckBox Content="Пропускать папку Windows (быстрее)" IsChecked="{Binding VirusScan.SkipSystemFolders}" Margin="0,0,16,0"/>
+                                <CheckBox Content="Проверять содержимое файлов (глубокая проверка)" IsChecked="{Binding VirusScan.DeepContentCheck}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Запуск и прогресс -->
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,8,0,0">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="16,8"
+                                        AutomationProperties.Name="Начать проверку"
+                                        Command="{Binding VirusScan.ScanCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="ShieldSearch" Width="18" Height="18" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Начать проверку"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Margin="8,0,0,0" Padding="16,8"
+                                        Command="{Binding VirusScan.CancelCommand}" Content="Отмена"/>
+                                <TextBlock Text="{Binding VirusScan.StatusMessage}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                           Foreground="{StaticResource TextSecondaryColor}" TextWrapping="Wrap" MaxWidth="700"/>
+                            </StackPanel>
+                            <ProgressBar Value="{Binding VirusScan.ProgressPercent}" Maximum="100" Height="6" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Найденные угрозы -->
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Foreground="{StaticResource TextSecondaryColor}" Margin="0,0,0,6"
+                                       Text="{Binding VirusScan.ThreatsCount, StringFormat='Найдено подозрительных файлов: {0}'}"/>
+
+                            <DataGrid Grid.Row="1" ItemsSource="{Binding VirusScan.Threats}"
+                                      SelectedItem="{Binding VirusScan.SelectedThreat}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      SelectionMode="Single"
+                                      Background="{StaticResource SurfaceColor}"
+                                      RowBackground="{StaticResource SurfaceVariantColor}"
+                                      AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                      GridLinesVisibility="Horizontal"
+                                      HorizontalGridLinesBrush="{StaticResource BorderColor}"
+                                      HeadersVisibility="Column"
+                                      RowHeight="32">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Файл" Binding="{Binding FileName}" Width="170"/>
+                                    <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="70"/>
+                                    <DataGridTextColumn Header="Оценка" Binding="{Binding RiskAssessment.TotalScore}" Width="55"/>
+                                    <DataGridTextColumn Header="Угроза" Binding="{Binding ThreatName}" Width="170"/>
+                                    <DataGridTextColumn Header="Причины" Binding="{Binding ReasonsText}" Width="*"/>
+                                    <DataGridTextColumn Header="Состояние" Binding="{Binding StateText}" Width="190"/>
+                                    <DataGridTextColumn Header="Путь" Binding="{Binding FilePath}" Width="230"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="10,6"
+                                            AutomationProperties.Name="В карантин"
+                                            Command="{Binding VirusScan.QuarantineCommand}"
+                                            ToolTip="Переместить файл в карантин (можно восстановить)">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Archive" Width="16" Height="16" Margin="0,0,4,0"/>
+                                            <TextBlock Text="В карантин" FontSize="11"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="10,6" Margin="8,0,0,0"
+                                            Foreground="{StaticResource CriticalBrush}"
+                                            AutomationProperties.Name="Удалить файл"
+                                            Command="{Binding VirusScan.DeleteCommand}"
+                                            ToolTip="Удалить файл (резервная копия сохранится в карантине)">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="FileRemove" Width="16" Height="16" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Удалить файл" FontSize="11"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="10,6" Margin="8,0,0,0"
+                                            AutomationProperties.Name="Открыть папку"
+                                            Command="{Binding VirusScan.OpenFolderCommand}"
+                                            ToolTip="Открыть папку с файлом">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="FolderOpen" Width="16" Height="16" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Открыть папку" FontSize="11"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <TextBlock Text="{Binding VirusScan.ActionStatus}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                               Foreground="{StaticResource TextColor}" FontSize="11" TextWrapping="Wrap" MaxWidth="600"/>
+                                </StackPanel>
+
+                                <ItemsControl ItemsSource="{Binding VirusScan.ActionLog}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock FontSize="10" Foreground="{StaticResource TextSecondaryColor}" Margin="0,1">
+                                                <Run Text="{Binding TimeText, Mode=OneWay}"/>
+                                                <Run Text=" — "/>
+                                                <Run Text="{Binding Action, Mode=OneWay}"/>
+                                                <Run Text=": "/>
+                                                <Run Text="{Binding Result, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Quarantine -->
+            <TabItem AutomationProperties.Name="Карантин">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Archive" Margin="0,0,6,0"/>
+                        <TextBlock Text="Карантин"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Background="{StaticResource BackgroundColor}" Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Карантин ScanSysDefence" Style="{StaticResource SectionHeaderStyle}"/>
+                            <TextBlock Foreground="{StaticResource TextSecondaryColor}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Файлы, помещённые в карантин, можно восстановить на прежнее место или удалить навсегда. Пока файл в карантине, он обезврежен (зашифрован и скрыт)."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="12,6"
+                                        AutomationProperties.Name="Обновить список"
+                                        Command="{Binding Quarantine.RefreshCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Обновить список" FontSize="11"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="12,6" Margin="8,0,0,0"
+                                        AutomationProperties.Name="Восстановить"
+                                        Command="{Binding Quarantine.RestoreCommand}"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="{Binding Quarantine.RestoreDisabledReason}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Unarchive" Width="16" Height="16" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Восстановить" FontSize="11"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource MaterialDesignOutlinedButton}" Padding="12,6" Margin="8,0,0,0"
+                                        Foreground="{StaticResource CriticalBrush}"
+                                        AutomationProperties.Name="Удалить навсегда"
+                                        Command="{Binding Quarantine.DeleteCommand}"
+                                        ToolTip="Удалить выбранный файл из карантина безвозвратно">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Delete" Width="16" Height="16" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Удалить навсегда" FontSize="11"/>
+                                    </StackPanel>
+                                </Button>
+                                <TextBlock Text="{Binding Quarantine.StatusMessage}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                           Foreground="{StaticResource TextSecondaryColor}" TextWrapping="Wrap" MaxWidth="600"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,8,0,0">
+                        <DataGrid ItemsSource="{Binding Quarantine.Entries}"
+                                  SelectedItem="{Binding Quarantine.SelectedEntry}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  SelectionMode="Single"
+                                  Background="{StaticResource SurfaceColor}"
+                                  RowBackground="{StaticResource SurfaceVariantColor}"
+                                  AlternatingRowBackground="{StaticResource SurfaceColor}"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="{StaticResource BorderColor}"
+                                  HeadersVisibility="Column"
+                                  RowHeight="32">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Файл" Binding="{Binding DisplayName}" Width="200"/>
+                                <DataGridTextColumn Header="Исходный путь" Binding="{Binding OriginalPath}" Width="*"/>
+                                <DataGridTextColumn Header="Дата" Binding="{Binding QuarantinedAt, StringFormat='dd.MM.yyyy HH:mm'}" Width="120"/>
+                                <DataGridTextColumn Header="Размер" Binding="{Binding SizeText}" Width="80"/>
+                                <DataGridTextColumn Header="Причина" Binding="{Binding Reason}" Width="200"/>
+                                <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="230"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB: Settings -->
+            <TabItem AutomationProperties.Name="Настройки">
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Cog" Margin="0,0,6,0"/>
+                        <TextBlock Text="Настройки"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer Background="{StaticResource BackgroundColor}" Padding="16">
+                    <StackPanel MaxWidth="700" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Параметры сканирования" Style="{StaticResource SectionHeaderStyle}"/>
+                                <CheckBox Content="Включать системные службы" IsChecked="{Binding Settings.IncludeSystemServices}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Включать элементы, подписанные Microsoft" IsChecked="{Binding Settings.IncludeMicrosoftSigned}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Глубокий анализ процессов (модули, память)" IsChecked="{Binding Settings.DeepProcessAnalysis}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Проверять сетевые соединения" IsChecked="{Binding Settings.CheckNetworkConnections}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Сканировать драйверы" IsChecked="{Binding Settings.ScanDrivers}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Сканировать планировщик задач" IsChecked="{Binding Settings.ScanScheduledTasks}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Сканировать WMI-подписки" IsChecked="{Binding Settings.ScanWmiSubscriptions}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                                <CheckBox Content="Сканировать расширения браузеров (Chrome, Edge, Firefox)" IsChecked="{Binding Settings.ScanBrowserExtensions}"
+                                          Foreground="{StaticResource TextColor}" Margin="0,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,8,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Очистка дисков" Style="{StaticResource SectionHeaderStyle}"/>
+                                <TextBlock Text="Минимальный возраст файлов (дней):" Foreground="{StaticResource TextSecondaryColor}" Margin="0,4,0,0"/>
+                                <TextBox Width="80" Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                         Text="{Binding Settings.MinFileAgeDays}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- STATUS BAR -->
+        <Border Grid.Row="3" Background="{StaticResource SurfaceColor}" Padding="16,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="11"
+                           Foreground="{StaticResource TextSecondaryColor}"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="ShieldCheck" Width="14" Height="14" VerticalAlignment="Center"
+                                             Foreground="{StaticResource LowBrush}"/>
+                    <TextBlock Text="Запущено с правами администратора" FontSize="10"
+                               Foreground="{StaticResource TextSecondaryColor}" Margin="4,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
